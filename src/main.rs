@@ -1,13 +1,11 @@
 use bevy::prelude::*;
 use bevy::sprite::collide_aabb::{collide, Collision};
-use bevy::text::{Text2dBounds, Text2dSize};
 use game::*;
 
 fn main() {
     App::new()
         .add_plugins(DefaultPlugins)
         .add_startup_system(setup)
-        .add_startup_system(spawn_folders)
         .add_startup_system(spawn_files)
         .add_startup_system(cursor_lock_settings)
         .add_system(move_grabbed_system)
@@ -21,19 +19,21 @@ struct FileTag;
 const FILE_DIMENSION: f32 = 100.0;
 
 #[derive(Component)]
-struct FileName(String);
+struct FileFolderId(usize);
+
+#[derive(Component)]
+struct FileId(usize);
+
+#[derive(Component)]
+struct FolderId(usize);
 
 #[derive(Component)]
 struct FolderTag;
-const FOLDER_DIMENSION: f32 = 200.0;
+const FOLDER_DIMENSION: f32 = 100.0;
 
-#[derive(Bundle)]
-struct FileBundle {
-    
-    #[bundle]
-    sprite: SpriteBundle,
-    #[bundle]
-    text: Text2dBundle,
+#[derive(Component)]
+struct FolderFiles {
+    indices: Vec<usize>,
 }
 
 fn setup(mut commands: Commands) {
@@ -41,57 +41,59 @@ fn setup(mut commands: Commands) {
 }
 
 fn spawn_files(mut commands: Commands, asset_server: Res<AssetServer>) {
-    let font = asset_server.load("LiberationSans-Regular.ttf");
-    let text_style = TextStyle {
-        font,
-        font_size: 60.0,
-        color: Color::WHITE,
-    };
-
-    commands
-        .spawn_bundle(SpriteBundle {
-            texture: asset_server.load("square.png"),
-            ..default()
-        })
-        .insert(FileTag)
-        .insert(Interaction::None)
-        .insert(FileName(String::from("Duude")));
-
-    commands
-        .spawn_bundle(SpriteBundle {
-            texture: asset_server.load("square.png"),
-            transform: Transform {
-                translation: Vec3::new(50.0, 50.0, 0.0),
+    let (id, files) = (0, vec!["FirstFile", "SecondFile", "ThirdFile"]);
+    for (i, &file) in files.iter().enumerate() {
+        let sprite = commands
+            .spawn_bundle(SpriteBundle {
+                texture: asset_server.load("square.png"),
                 ..default()
-            },
-            ..default()
-        })
-        .insert(FileTag)
-        .insert(Interaction::None)
-        .insert(Text::with_section(
-            "Duude".to_string(),
-            text_style.clone(),
-            Default::default(),
-        ))
-        .insert(Text2dBounds { ..default() })
-        .insert(Text2dSize { ..default() });
-    /*commands.spawn_bundle(Text2dBundle {
-        text: Text::with_section("Duuude", text_style.clone(), Default::default()),
-        ..default()
-    });*/
-}
+            })
+            .insert(FileTag)
+            .insert(FileId(i))
+            .insert(FileFolderId(id))
+            .insert(Interaction::None)
+            .id();
 
-fn spawn_folders(mut commands: Commands, asset_server: Res<AssetServer>) {
+        let font = asset_server.load("LiberationSans-Regular.ttf");
+        let text_style = TextStyle {
+            font,
+            font_size: 30.0,
+            color: Color::WHITE,
+        };
+
+        let text_alignment = TextAlignment {
+            vertical: VerticalAlign::Center,
+            horizontal: HorizontalAlign::Center,
+        };
+
+        let text = commands
+            .spawn_bundle(Text2dBundle {
+                transform: Transform {
+                    translation: Vec3::Y * (-FILE_DIMENSION / 2.0),
+                    ..default()
+                },
+                text: Text::with_section(file, text_style.clone(), text_alignment.clone()),
+                ..default()
+            })
+            .id();
+
+        commands.entity(sprite).push_children(&[text]);
+    }
+
+    let indices = (0..files.len()).collect();
+
     commands
         .spawn_bundle(SpriteBundle {
             texture: asset_server.load("folder.png"),
             transform: Transform {
-                translation: Vec3::new(0.0, 300.0, 0.0),
+                translation: Vec3::new(0.0, 200.0, 0.0),
                 ..default()
             },
             ..default()
         })
         .insert(FolderTag)
+        .insert(FolderFiles { indices })
+        .insert(FolderId(id))
         .insert(Interaction::None);
 }
 
@@ -133,7 +135,6 @@ fn move_grabbed_system(
             relative_cursor_position(absolute_cursor_position, window.width(), window.height());
         for (mut rect_transform, interaction) in query.iter_mut() {
             if let Interaction::Clicked = interaction {
-                println!("{:?}", rect_transform.translation);
                 *rect_transform.translation = *Vec2::extend(cursor_position, 0.0);
                 // can clamp here later...
             }
@@ -143,21 +144,53 @@ fn move_grabbed_system(
 
 fn folder_insert_system(
     mut commands: Commands,
-    file_query: Query<(&Transform, &Interaction, Entity), With<FileTag>>,
-    folder_query: Query<&Transform, With<FolderTag>>,
+    mut file_query: Query<
+        (
+            &mut Transform,
+            &Interaction,
+            &FileId,
+            &FileFolderId,
+            &FileTag,
+            Entity,
+        ),
+        Without<FolderTag>,
+    >,
+    mut folder_query: Query<(&Transform, &mut FolderFiles, &FolderId), With<FolderTag>>,
 ) {
-    for (file_transform, file_interaction, e) in file_query.iter() {
+    for (
+        mut file_transform,
+        file_interaction,
+        FileId(file_id),
+        FileFolderId(file_folder_id),
+        _,
+        e,
+    ) in file_query.iter_mut()
+    {
         if let Interaction::None | Interaction::Hovered = file_interaction {
-            for folder_transform in folder_query.iter() {
+            for (folder_transform, mut folder_files, FolderId(folder_id)) in folder_query.iter_mut()
+            {
                 let collision = collide(
                     file_transform.translation,
                     Vec2::splat(FILE_DIMENSION),
                     folder_transform.translation,
                     Vec2::splat(FOLDER_DIMENSION),
                 );
+
                 if let Some(_) = collision {
-                    //insert logic here
-                    commands.entity(e).despawn_recursive();
+                    if file_folder_id == folder_id {
+                        if let Some(next_file_id) = folder_files.indices.first() {
+                            if next_file_id == file_id {
+                                folder_files.indices.remove(0);
+                                commands.entity(e).despawn_recursive();
+                            } else {
+                                *file_transform.translation = *Vec3::ZERO;
+                                println!("FUCK YOU WRONG ORDER");
+                            }
+                        }
+                    } else {
+                        *file_transform.translation = *Vec3::ZERO;
+                        println!("FUCK YOU WRONG FOLDER");
+                    }
                 }
             }
         }
