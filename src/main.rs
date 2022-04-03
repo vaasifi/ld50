@@ -1,5 +1,6 @@
 use bevy::prelude::*;
 use bevy::sprite::collide_aabb::{collide, Collision};
+use bevy::text::{Text2dBounds, Text2dSize};
 use game::*;
 
 fn main() {
@@ -26,11 +27,27 @@ struct FileName(String);
 struct FolderTag;
 const FOLDER_DIMENSION: f32 = 200.0;
 
+#[derive(Bundle)]
+struct FileBundle {
+    
+    #[bundle]
+    sprite: SpriteBundle,
+    #[bundle]
+    text: Text2dBundle,
+}
+
 fn setup(mut commands: Commands) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
 }
 
 fn spawn_files(mut commands: Commands, asset_server: Res<AssetServer>) {
+    let font = asset_server.load("LiberationSans-Regular.ttf");
+    let text_style = TextStyle {
+        font,
+        font_size: 60.0,
+        color: Color::WHITE,
+    };
+
     commands
         .spawn_bundle(SpriteBundle {
             texture: asset_server.load("square.png"),
@@ -39,6 +56,7 @@ fn spawn_files(mut commands: Commands, asset_server: Res<AssetServer>) {
         .insert(FileTag)
         .insert(Interaction::None)
         .insert(FileName(String::from("Duude")));
+
     commands
         .spawn_bundle(SpriteBundle {
             texture: asset_server.load("square.png"),
@@ -52,13 +70,15 @@ fn spawn_files(mut commands: Commands, asset_server: Res<AssetServer>) {
         .insert(Interaction::None)
         .insert(Text::with_section(
             "Duude".to_string(),
+            text_style.clone(),
             Default::default(),
-            Default::default(),
-        ));
-    commands.spawn_bundle(Text2dBundle {
-        text: Text::with_section("Duuude".to_string(), Default::default(), Default::default()),
+        ))
+        .insert(Text2dBounds { ..default() })
+        .insert(Text2dSize { ..default() });
+    /*commands.spawn_bundle(Text2dBundle {
+        text: Text::with_section("Duuude", text_style.clone(), Default::default()),
         ..default()
-    });
+    });*/
 }
 
 fn spawn_folders(mut commands: Commands, asset_server: Res<AssetServer>) {
