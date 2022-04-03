@@ -31,90 +31,111 @@ fn setup(mut commands: Commands) {
 }
 
 fn spawn_files(mut commands: Commands, asset_server: Res<AssetServer>) {
-    commands.spawn_bundle(SpriteBundle {
-        texture: asset_server.load("square.png"),
+    commands
+        .spawn_bundle(SpriteBundle {
+            texture: asset_server.load("square.png"),
+            ..default()
+        })
+        .insert(FileTag)
+        .insert(Interaction::None)
+        .insert(FileName(String::from("Duude")));
+    commands
+        .spawn_bundle(SpriteBundle {
+            texture: asset_server.load("square.png"),
+            transform: Transform {
+                translation: Vec3::new(50.0, 50.0, 0.0),
+                ..default()
+            },
+            ..default()
+        })
+        .insert(FileTag)
+        .insert(Interaction::None)
+        .insert(Text::with_section(
+            "Duude".to_string(),
+            Default::default(),
+            Default::default(),
+        ));
+    commands.spawn_bundle(Text2dBundle {
+        text: Text::with_section("Duuude".to_string(), Default::default(), Default::default()),
         ..default()
-    }).insert(FileTag).insert(Interaction::None)
-    .insert(FileName(String::from("Duude")));
-    commands.spawn_bundle(SpriteBundle {
-        texture: asset_server.load("square.png"),
-        transform: Transform {
-            translation: Vec3::new(50.0, 50.0, 0.0),
-            ..default()},
-        ..default()
-    }).insert(FileTag).insert(Interaction::None)
-    .insert(Text::with_section(
-        "Duude".to_string(),
-        Default::default(),
-        Default::default()));
-    commands.spawn_bundle(Text2dBundle{
-        text: Text::with_section("Duuude".to_string(),
-        Default::default(),
-        Default::default()),
-        ..default()
-        });
+    });
 }
 
 fn spawn_folders(mut commands: Commands, asset_server: Res<AssetServer>) {
-      commands.spawn_bundle(SpriteBundle {
-          texture: asset_server.load("folder.png"),
-          transform: Transform {
-              translation: Vec3::new(0.0, 300.0, 0.0),
-              ..default()},
-          ..default()
-      }).insert(FolderTag).insert(Interaction::None);    
+    commands
+        .spawn_bundle(SpriteBundle {
+            texture: asset_server.load("folder.png"),
+            transform: Transform {
+                translation: Vec3::new(0.0, 300.0, 0.0),
+                ..default()
+            },
+            ..default()
+        })
+        .insert(FolderTag)
+        .insert(Interaction::None);
 }
 
-fn grab_system(mut query: Query<(&Transform, &mut Interaction), With<FileTag>>,
-               windows: Res<Windows>, button: Res<Input<MouseButton>>) {
+fn grab_system(
+    mut query: Query<(&Transform, &mut Interaction), With<FileTag>>,
+    windows: Res<Windows>,
+    button: Res<Input<MouseButton>>,
+) {
     let window = windows.get_primary().unwrap();
 
     if let Some(absolute_cursor_position) = window.cursor_position() {
         let cursor_position: Vec2 =
             relative_cursor_position(absolute_cursor_position, window.width(), window.height());
 
-            for (rect_transform, mut interaction) in query.iter_mut() {
-                let rect_position: Vec2 = Vec3::truncate(rect_transform.translation);
-                let rect_size: Vec2 = Vec2::splat(FILE_DIMENSION);
-                if cursor_collision(cursor_position, rect_position, rect_size) {
-                    if button.just_pressed(MouseButton::Left) {
-                        *interaction = Interaction::Clicked;
-                        return;
-                    } else if !button.pressed(MouseButton::Left) {
-                        *interaction = Interaction::Hovered;
-                    }
+        for (rect_transform, mut interaction) in query.iter_mut() {
+            let rect_position: Vec2 = Vec3::truncate(rect_transform.translation);
+            let rect_size: Vec2 = Vec2::splat(FILE_DIMENSION);
+            if cursor_collision(cursor_position, rect_position, rect_size) {
+                if button.just_pressed(MouseButton::Left) {
+                    *interaction = Interaction::Clicked;
+                    return;
                 } else if !button.pressed(MouseButton::Left) {
-                    *interaction = Interaction::None;
+                    *interaction = Interaction::Hovered;
                 }
+            } else if !button.pressed(MouseButton::Left) {
+                *interaction = Interaction::None;
             }
-
+        }
     }
 }
 
-
-fn move_grabbed_system(mut query: Query<(&mut Transform, &Interaction), With<FileTag>>,
-                       windows: Res<Windows>) {
+fn move_grabbed_system(
+    mut query: Query<(&mut Transform, &Interaction), With<FileTag>>,
+    windows: Res<Windows>,
+) {
     let window = windows.get_primary().unwrap();
     if let Some(absolute_cursor_position) = window.cursor_position() {
         let cursor_position: Vec2 =
             relative_cursor_position(absolute_cursor_position, window.width(), window.height());
         for (mut rect_transform, interaction) in query.iter_mut() {
             if let Interaction::Clicked = interaction {
-                    println!("{:?}", rect_transform.translation);
-                    *rect_transform.translation = *Vec2::extend(cursor_position, 0.0); // can clamp here later...
+                println!("{:?}", rect_transform.translation);
+                *rect_transform.translation = *Vec2::extend(cursor_position, 0.0);
+                // can clamp here later...
             }
         }
     }
 }
 
-fn folder_insert_system(mut commands: Commands, file_query: Query<(&Transform, &Interaction, Entity), With<FileTag>>, 
-                    folder_query: Query<&Transform, With<FolderTag>>) {
+fn folder_insert_system(
+    mut commands: Commands,
+    file_query: Query<(&Transform, &Interaction, Entity), With<FileTag>>,
+    folder_query: Query<&Transform, With<FolderTag>>,
+) {
     for (file_transform, file_interaction, e) in file_query.iter() {
         if let Interaction::None | Interaction::Hovered = file_interaction {
             for folder_transform in folder_query.iter() {
-                let collision = collide(file_transform.translation, Vec2::splat(FILE_DIMENSION), 
-                                        folder_transform.translation, Vec2::splat(FOLDER_DIMENSION));
-                if let Some(_) = collision{
+                let collision = collide(
+                    file_transform.translation,
+                    Vec2::splat(FILE_DIMENSION),
+                    folder_transform.translation,
+                    Vec2::splat(FOLDER_DIMENSION),
+                );
+                if let Some(_) = collision {
                     //insert logic here
                     commands.entity(e).despawn_recursive();
                 }
@@ -122,7 +143,6 @@ fn folder_insert_system(mut commands: Commands, file_query: Query<(&Transform, &
         }
     }
 }
-
 
 fn cursor_lock_settings(mut windows: ResMut<Windows>) {
     let window = windows.get_primary_mut().unwrap();
